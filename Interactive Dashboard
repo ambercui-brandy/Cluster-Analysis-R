@@ -1,0 +1,251 @@
+---
+title: "Interactive Dashboard_Amber.C"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+    social: [ "twitter", "facebook", "menu"]
+    source_code: embed
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(knitr)
+library(DT)
+library(rpivotTable)
+library(ggplot2)
+library(plotly)
+library(dplyr)
+library(openintro)
+library(highcharter)
+library(ggvis)
+```
+
+
+```{r}
+on <- read.csv("/Users/amber/Downloads/On_Time_50.csv")
+```
+
+```{r}
+mycolors <- c("blue", "#FFC125", "darkgreen", "darkorange")
+```
+
+Interactive Data Visualization
+=====================================
+Row
+---------------------------------------
+
+### Delay Analysis
+```{r}
+valueBox(paste("Delay minutes"),
+         color = "warning")
+```
+
+### Maximum Arrival Delay Minutes
+
+```{r}
+valueBox(max(on$ArrDelayMinutes,na.rm = TRUE),
+         icon = "fa-plane-arrival")
+```
+
+### Maximum Departure Delay Minutes
+```{r}
+valueBox(max(on$DepDelayMinutes,na.rm = TRUE),
+         icon = "fa-plane-departure")
+```
+
+### Average Delay Minute before Cancellation
+```{r}
+cancel1 <- subset(on,Cancelled==1)
+valueBox(mean(cancel1$DepDelayMinutes,na.rm = TRUE),
+         icon = "fa-window-close")
+```
+
+Row
+---------------------------------------
+### Departure Delay ~ Arrival Delay
+```{r}
+dep.arr <- ggplot(data=on, aes(x=DepDelay, y=ArrDelay)) + geom_point(size = 1, alpha = 0.2, shape = 16) + geom_abline(color = "#0492c2") + xlim(c(-40,400)) + ylim(c(-70,400)) + xlab("Departure Delay") + ylab("Arrival Delay")
+dep.arr + labs(title = "Departure Delay Minute ~ Arrival Delay Minute")
+```
+
+### Departure Delay by Departure Time
+```{r}
+b <- ggplot(aes(x=DepTimeBlk, y=DepDelayMinutes),data = on) +
+  geom_point(size=1,alpha=0.5) + ylim(0,850)
+b + theme(axis.text.x = element_text(angle=90, hjust=1, vjust=.5)) + labs(title="Departure Delay by Departure Time")
+```
+
+Row
+---------------------------------------
+
+### Delay Reason
+```{r}
+num <- c(141572,11183,112638,442,196226)
+percentlabels<- round(100*num/sum(num), 1)
+pielabels<- paste(percentlabels, "%", sep="")
+cols <- c("#f66d44","#feae65","#e6f69d","#aadea7","#2d87bb")
+pie(num, main="Delay Reason",labels=pielabels,col = cols, cex=0.8)
+legend("bottomright",c("Carrier Delay","Weather Delay","NAS Delay","Security Delay","LateAircraft Delay"),fill=cols, cex=0.8)
+```
+
+### Average Delay Time By Delay Reason
+```{r}
+attach(on)
+c <- sum(CarrierDelay,na.rm = TRUE)
+c1 <- as.numeric (length(which(CarrierDelay!=0)))
+w <- sum(WeatherDelay,na.rm = TRUE)
+w1 <- as.numeric (length(which(WeatherDelay!=0)))
+n <- sum(NASDelay,na.rm = TRUE)
+n1 <- as.numeric (length(which(NASDelay!=0)))
+s <- sum(SecurityDelay,na.rm = TRUE)
+s1 <- as.numeric (length(which(SecurityDelay!=0)))
+l <- sum(LateAircraftDelay,na.rm = TRUE)
+l1 <- as.numeric (length(which(LateAircraftDelay!=0)))
+avg <- c(c/c1,w/w1,n/n1,s/s1,l/l1)
+avg1 <- data.frame(c("CarrierDelay","WeatherDelay","NASDelay","SecurityDelay","LateAircraftDelay"),avg[1:5])
+colnames(avg1) <- c("reason","minute")
+ggplot(avg1,aes(x=reason,y=minute))+geom_col(fill="#f66d44",width = 0.5)+geom_text(aes(x=reason,y=minute,label=format(avg1$minute,digits = 3))) + ggtitle("Average Delay Time By Delay Reason")
+```
+
+
+Interactive Data Visualization II.
+=====================================
+Row
+---------------------------------------
+### Carrier Most Likely to Delay
+```{r}
+valueBox(paste("Envoy Air (MQ): 23.02%"),
+         icon = "fa-tired")
+```
+
+Row
+---------------------------------------
+
+### Total Flights By Carrier
+```{r}
+number.carrier <- on %>% group_by(UniqueCarrier) %>% summarize(Count = n())
+
+ggplot(data=number.carrier, aes(x=UniqueCarrier, y=Count)) + geom_col(colour="black", fill="#fad0c9ff") + geom_text(aes(label = Count), size = 3) + ggtitle("Total Flights by Carrier") + scale_fill_manual(values = c("red", "green", "blue")) + theme(legend.position="none") + coord_flip() 
+```
+
+### Departure Delay Minutes by Carrier
+```{r}
+hcboxplot(on$DepDelay, on$UniqueCarrier) %>% hc_yAxis(max=100) %>% hc_title(text="Departure Delay Minute By Carrier")
+```
+
+
+Map
+========================================
+Row
+----------------------------------------
+
+###Origin State Distribution
+```{r}
+on$DepDelayMinutes[is.na(on$DepDelayMinutes)] <- 0
+delaymin_orign<-aggregate(on$DepDelayMinutes, by=list(OriginStateName=on$OriginStateName), FUN=sum)
+library(highcharter)
+library(openintro)
+highchart() %>% 
+  hc_add_series_map(usgeojson,delaymin_orign, 
+                    name='OriginStateName',
+                    value='x', 
+                    joinBy = c('woename','OriginStateName')) %>% 
+  hc_title(text = 'Origin State') %>% 
+  hc_mapNavigation(enabled =T)
+```
+
+Row
+-----------------------------------
+### Destination State Distribution
+```{r}
+delaymin_dest<-aggregate(on$DepDelayMinutes, by=list(DestStateName=on$DestStateName), FUN=sum)
+library("viridisLite")
+highchart() %>% 
+  hc_add_series_map(usgeojson,delaymin_dest, 
+                    name='DestStateName',
+                    value='x', 
+                    joinBy = c('woename','DestStateName')) %>% 
+  hc_title(text = 'Destination State') %>% 
+  hc_mapNavigation(enabled =T)
+```
+
+
+
+Data Table
+========================================
+
+```{r}
+delaydata<- subset(on,DepDelay >= 0)
+datatable(delaydata,
+          caption = "Delay Data",
+          rownames = T,
+          filter = "top",
+          options = list(pageLength = 25))
+```
+
+Pivot Table
+=========================================
+
+```{r}
+rpivotTable(on,
+            aggregatorName = "Count",
+            cols= "DestStateName",
+            rows = "OriginStateName",
+            rendererName = "Heatmap")
+```
+
+Summary {data-orientation=columns}
+=========================================
+
+Column
+-----------------------------------------
+
+### Average Departure Delay Minute
+```{r}
+valueBox(mean(on$DepDelayMinutes),
+         icon = "fa-plane-departure")
+```
+
+
+
+### Average Arrival Delay Minute
+```{r}
+valueBox(mean(on$ArrDelayMinutes,na.rm = TRUE, digits = 3),
+         icon = "fa-plane-arrival")
+```
+
+
+
+
+
+### Carrier Most Likely to Delay: Envoy Air (23%)
+```{r}
+valueBox(paste("Envoy Air (MQ): 23.02%"),
+         icon = "fa-tired")
+```
+
+### Cancellation Rate
+```{r}
+valueBox(paste("1.06%"),
+         icon = "fa-window-close")
+```
+
+
+Column
+-----------------------------------
+
+
+Report
+
+* This is a report on `r length(on$FlightNum)` flights.
+
+* The average departure delay minute was `r mean(on$DepDelayMinutes)` minutes.
+
+* The average arrival delay minute was `r mean(on$ArrDelayMinutes,na.rm=TRUE)` minutes.
+
+* Envoy Air(MQ) had the highest possibility of departure delay of 23.02%.
+
+* Cancellation Rate was 1.06%.
+
+This report was generated on `r format(Sys.Date(), format = "%B %d, %Y")`.
